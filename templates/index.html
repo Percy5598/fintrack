@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinTrack | Financial Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-icon">F</span>
+            <span>FinTrack</span>
+        </div>
+
+        <nav>
+            <a href="#" class="nav-link active">Dashboard</a>
+            <a href="#" class="nav-link">Transactions</a>
+            <a href="#" class="nav-link">Reports</a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <span>Financial Analytics</span>
+            <small>Version 0.1.0</small>
+        </div>
+    </aside>
+
+    <main class="main-content">
+
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">FINANCIAL OVERVIEW</p>
+                <h1>Dashboard</h1>
+            </div>
+
+            <button class="primary-button" id="addTransactionBtn">
+                + Add transaction
+            </button>
+        </header>
+
+        <section class="metrics">
+
+            <article class="metric-card">
+                <p>Total revenue</p>
+                <h2 id="revenue">€0.00</h2>
+                <span class="metric-label">Net income</span>
+            </article>
+
+            <article class="metric-card">
+                <p>Total expenses</p>
+                <h2 id="expenses">€0.00</h2>
+                <span class="metric-label">Net expenses</span>
+            </article>
+
+            <article class="metric-card">
+                <p>Operating profit</p>
+                <h2 id="profit">€0.00</h2>
+                <span class="metric-label">Revenue minus expenses</span>
+            </article>
+
+            <article class="metric-card">
+                <p>Estimated VAT</p>
+                <h2 id="vat">€0.00</h2>
+                <span class="metric-label">Net VAT payable</span>
+            </article>
+
+        </section>
+
+        <section class="dashboard-grid">
+
+            <article class="panel chart-panel">
+                <div class="panel-header">
+                    <div>
+                        <h3>Financial performance</h3>
+                        <p>Monthly revenue and expenses</p>
+                    </div>
+
+                    <select id="periodFilter">
+                        <option value="all">All time</option>
+                    </select>
+                </div>
+
+                <canvas id="financeChart"></canvas>
+            </article>
+
+            <article class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h3>Recent transactions</h3>
+                        <p>Your latest financial activity</p>
+                    </div>
+                </div>
+
+                <div id="transactionList" class="transaction-list">
+                    <p class="empty-state">No transactions yet.</p>
+                </div>
+            </article>
+
+        </section>
+
+    </main>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
