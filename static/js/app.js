@@ -1,95 +1,113 @@
-const transactions = [
-    {
-        description: "Freelance consulting",
-        date: "2026-11-01",
-        type: "income",
-        amount: 1255.00
-    },
-    {
-        description: "Phone bill",
-        date: "2026-11-02",
-        type: "expense",
-        amount: 125.50
-    },
-    {
-        description: "Software subscription",
-        date: "2026-11-03",
-        type: "expense",
-        amount: 50.00
-    },
-    {
-        description: "Data analysis project",
-        date: "2026-10-15",
-        type: "income",
-        amount: 850.00
-    }
-];
+const API_BASE = "/api";
 
-const formatEUR = amount =>
+let financeChart = null;
+let transactions = [];
+
+const formatEUR = cents =>
     new Intl.NumberFormat("en-FI", {
         style: "currency",
         currency: "EUR"
-    }).format(amount);
+    }).format(cents / 100);
 
-function updateDashboard() {
-    const revenue = transactions
-        .filter(t => t.type === "income")
-        .reduce((sum, t) => sum + t.amount, 0);
+async function fetchDashboard() {
+    try {
+        const response = await fetch(`${API_BASE}/dashboard`);
 
-    const expenses = transactions
-        .filter(t => t.type === "expense")
-        .reduce((sum, t) => sum + t.amount, 0);
+        if (!response.ok) {
+            throw new Error("Could not load dashboard data.");
+        }
 
+        const data = await response.json();
+
+        transactions = data.transactions;
+
+        updateSummary(data.summary);
+        renderTransactions();
+        renderChart();
+
+    } catch (error) {
+        console.error("Dashboard error:", error);
+
+        const container = document.getElementById("transactionList");
+
+        if (container) {
+            container.textContent = "Unable to load transactions.";
+        }
+    }
+}
+
+function updateSummary(summary) {
     document.getElementById("revenue").textContent =
-        formatEUR(revenue);
+        formatEUR(summary.revenue_cents);
 
     document.getElementById("expenses").textContent =
-        formatEUR(expenses);
+        formatEUR(summary.expenses_cents);
 
     document.getElementById("profit").textContent =
-        formatEUR(revenue - expenses);
+        formatEUR(summary.profit_cents);
 
-    // Illustrative VAT estimate.
-    // Replace with the backend's actual VAT calculation.
     document.getElementById("vat").textContent =
-        formatEUR((revenue - expenses) * 0.255);
-
-    renderTransactions();
-    renderChart();
+        formatEUR(summary.vat_payable_cents);
 }
 
 function renderTransactions() {
     const container = document.getElementById("transactionList");
 
+    if (!container) return;
+
+    container.replaceChildren();
+
     const recent = [...transactions]
-        .sort((a, b) => b.date.localeCompare(a.date))
+        .sort((a, b) =>
+            b.transaction_date.localeCompare(a.transaction_date)
+        )
         .slice(0, 5);
 
-    container.innerHTML = recent.map(transaction => `
-        <div class="transaction-item">
-            <div>
-                <div class="transaction-description">
-                    ${transaction.description}
-                </div>
-                <div class="transaction-date">
-                    ${transaction.date}
-                </div>
-            </div>
-            <div class="transaction-amount ${transaction.type}">
-                ${transaction.type === "income" ? "+" : "-"}
-                ${formatEUR(transaction.amount)}
-            </div>
-        </div>
-    `).join("");
+    if (recent.length === 0) {
+        container.textContent = "No transactions recorded yet.";
+        return;
+    }
+
+    recent.forEach(transaction => {
+        const item = document.createElement("div");
+        item.className = "transaction-item";
+
+        const details = document.createElement("div");
+
+        const description = document.createElement("div");
+        description.className = "transaction-description";
+        description.textContent = transaction.description;
+
+        const transactionDate = document.createElement("div");
+        transactionDate.className = "transaction-date";
+        transactionDate.textContent = transaction.transaction_date;
+
+        details.append(description, transactionDate);
+
+        const amount = document.createElement("div");
+        amount.className =
+            `transaction-amount ${transaction.transaction_type}`;
+
+        const sign =
+            transaction.transaction_type === "income" ? "+" : "-";
+
+        amount.textContent =
+            `${sign} ${formatEUR(transaction.gross_cents)}`;
+
+        item.append(details, amount);
+        container.appendChild(item);
+    });
 }
 
-let financeChart;
-
 function renderChart() {
+    const canvas = document.getElementById("financeChart");
+
+    if (!canvas || typeof Chart === "undefined") return;
+
     const monthly = {};
 
     transactions.forEach(transaction => {
-        const month = transaction.date.slice(0, 7);
+        const month = transaction.transaction_date.slice(0, 7);
 
         if (!monthly[month]) {
             monthly[month] = {
@@ -98,7 +116,9 @@ function renderChart() {
             };
         }
 
-        monthly[month][transaction.type] += transaction.amount;
+        // Chart displays gross transaction amounts.
+        monthly[month][transaction.transaction_type] +=
+            transaction.gross_cents / 100;
     });
 
     const labels = Object.keys(monthly).sort();
@@ -107,13 +127,13 @@ function renderChart() {
         labels,
         datasets: [
             {
-                label: "Revenue",
+                label: "Income (gross)",
                 data: labels.map(month => monthly[month].income),
                 backgroundColor: "#2563eb",
                 borderRadius: 5
             },
             {
-                label: "Expenses",
+                label: "Expenses (gross)",
                 data: labels.map(month => monthly[month].expense),
                 backgroundColor: "#cbd5e1",
                 borderRadius: 5
@@ -125,42 +145,30 @@ function renderChart() {
         financeChart.destroy();
     }
 
-    financeChart = new Chart(
-        document.getElementById("financeChart"),
-        {
-            type: "bar",
-            data,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: "bottom"
-                    }
+    financeChart = new Chart(canvas, {
+        type: "bar",
+        data,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "bottom"
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: "#eef2f7"
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
+                x: {
+                    grid: {
+                        display: false
                     }
                 }
             }
         }
-    );
+    });
 }
 
-document.getElementById("addTransactionBtn")
-    .addEventListener("click", () => {
-        alert(
-            "Transaction entry will be connected to the backend in the next step."
-        );
-    });
-
-updateDashboard();
+// Load real data from Flask.
+document.addEventListener("DOMContentLoaded", fetchDashboard);
