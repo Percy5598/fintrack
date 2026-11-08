@@ -1,46 +1,33 @@
-from decimal import Decimal
-
-from fintrack.models import Transaction
+from . import calculations
 
 
-def calculate_summary(
-    transactions: list[Transaction],
-) -> dict[str, int]:
-    """Calculate financial totals in integer cents."""
-
-    income = [
-        transaction
-        for transaction in transactions
-        if transaction.transaction_type == "income"
-    ]
-
-    expenses = [
-        transaction
-        for transaction in transactions
-        if transaction.transaction_type == "expense"
-    ]
-
-    revenue_cents = sum(
-        transaction.net_cents for transaction in income
-    )
-
-    expenses_cents = sum(
-        transaction.net_cents for transaction in expenses
-    )
-
-    sales_vat_cents = sum(
-        transaction.vat_cents for transaction in income
-    )
-
-    purchase_vat_cents = sum(
-        transaction.deductible_vat_cents for transaction in expenses
-    )
-
+def summary(transactions) -> dict:
+    """One-stop summary dict used by the dashboard."""
+    profit = calculations.profitability(transactions)
     return {
-        "revenue_cents": revenue_cents,
-        "expenses_cents": expenses_cents,
-        "profit_cents": revenue_cents - expenses_cents,
-        "sales_vat_cents": sales_vat_cents,
-        "purchase_vat_cents": purchase_vat_cents,
-        "vat_payable_cents": sales_vat_cents - purchase_vat_cents,
+        **profit,
+        "output_vat": calculations.output_vat(transactions),
+        "deductible_vat": calculations.deductible_vat(transactions),
+        "vat_payable": calculations.vat_payable(transactions),
+        "transaction_count": len(transactions),
     }
+
+
+def by_category(transactions) -> dict:
+    """Group totals by category (net + VAT) split by type."""
+    out = {"income": {}, "expense": {}}
+    for t in transactions:
+        bucket = out[t.type.value]
+        agg = bucket.setdefault(
+            t.category, {"net": 0.0, "vat": 0.0, "gross": 0.0, "count": 0}
+        )
+        agg["net"] += t.amount_net
+        agg["vat"] += t.vat_amount
+        agg["gross"] += t.amount_gross
+        agg["count"] += 1
+    # round for JSON friendliness
+    for bucket in out.values():
+        for agg in bucket.values():
+            for k in ("net", "vat", "gross"):
+                agg[k] = round(agg[k], 2)
+    return out

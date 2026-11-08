@@ -1,72 +1,44 @@
-
 from datetime import date
-from decimal import Decimal
 
-from fintrack.models import Transaction
-from fintrack.calculations import (
-    calculate_vat,
-    calculate_net,
-    calculate_summary,
-)
+import pytest
+
+from fintrack import calculations
+from fintrack.models import Transaction, TransactionType
 
 
-def test_calculate_vat():
-    assert calculate_vat(125500, Decimal("0.255")) == 25500
+def tx(type_, net, vat, deductible=False):
+    return Transaction(
+        id=None, type=type_, category="x", description="x",
+        amount_net=net, vat_rate=vat, vat_deductible=deductible,
+        date=date(2025, 1, 1),
+    )
 
 
-def test_calculate_net():
-    assert calculate_net(125500, 25500) == 100000
+def test_vat_from_net():
+    assert calculations.vat_from_net(100, 0.24) == 24.0
+    assert calculations.vat_from_net(99.99, 0.24) == 24.0
 
+def test_net_from_gross():
+    assert calculations.net_from_gross(124, 0.24) == 100.0
 
-def test_calculate_financial_summary():
-    transactions = [
-        Transaction(
-            transaction_date=date(2026, 11, 7),
-            description="Client payment",
-            category="Services",
-            transaction_type="income",
-            gross_cents=125500,
-            vat_rate=Decimal("0.255"),
-        ),
-        Transaction(
-            transaction_date=date(2026, 11, 7),
-            description="Software subscription",
-            category="Software",
-            transaction_type="expense",
-            gross_cents=12550,
-            vat_rate=Decimal("0.255"),
-            vat_deductible=True,
-        ),
+def test_gross_from_net():
+    assert calculations.gross_from_net(100, 0.24) == 124.0
+
+def test_output_and_deductible_vat():
+    txs = [
+        tx(TransactionType.INCOME, 1000, 0.24),
+        tx(TransactionType.EXPENSE, 200, 0.24, deductible=True),
+        tx(TransactionType.EXPENSE, 100, 0.24, deductible=False),
     ]
+    assert calculations.output_vat(txs) == 240.0
+    assert calculations.deductible_vat(txs) == 48.0
+    assert calculations.vat_payable(txs) == 192.0
 
-    summary = calculate_summary(transactions)
-
-    assert summary["revenue_cents"] == 100000
-    assert summary["expenses_cents"] == 10000
-    assert summary["profit_cents"] == 90000
-    assert summary["sales_vat_cents"] == 25500
-    assert summary["purchase_vat_cents"] == 2550
-    assert summary["vat_payable_cents"] == 22950
-    assert summary["transaction_count"] == 2
-
-
-def test_summary_accepts_database_records():
-    records = [
-        {
-            "transaction_type": "income",
-            "gross_cents": 125500,
-            "vat_rate": "0.255",
-            "vat_deductible": 0,
-        },
-        {
-            "transaction_type": "expense",
-            "gross_cents": 12550,
-            "vat_rate": "0.255",
-            "vat_deductible": 1,
-        },
+def test_profitability():
+    txs = [
+        tx(TransactionType.INCOME, 1000, 0.0),
+        tx(TransactionType.EXPENSE, 400, 0.0),
     ]
-
-    summary = calculate_summary(records)
-
-    assert summary["profit_cents"] == 90000
-    assert summary["vat_payable_cents"] == 22950
+    r = calculations.profitability(txs)
+    assert r["profit_net"] == 600.0
+    assert r["margin_pct"] == 60.0

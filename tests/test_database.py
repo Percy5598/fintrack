@@ -1,124 +1,40 @@
-
 from datetime import date
-from decimal import Decimal
 
-import fintrack.database as database
-from fintrack.models import Transaction
+from fintrack.database import Database
+from fintrack.models import Transaction, TransactionType
 
 
-def test_database_initialization(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        database,
-        "DATABASE_PATH",
-        tmp_path / "test.db",
+def make_tx():
+    return Transaction(
+        id=None, type=TransactionType.INCOME, category="Consulting",
+        description="Client A", amount_net=1000.0, vat_rate=0.24,
+        vat_deductible=False, date=date(2025, 3, 1),
     )
 
-    database.initialize_database()
 
-    assert database.DATABASE_PATH.exists()
+def test_add_and_fetch(tmp_path):
+    db = Database(tmp_path / "t.db")
+    tx_id = db.add(make_tx())
+    assert tx_id == 1
 
-
-def test_add_and_retrieve_transaction(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        database,
-        "DATABASE_PATH",
-        tmp_path / "test.db",
-    )
-
-    database.initialize_database()
-
-    transaction = Transaction(
-        transaction_date=date(2026, 11, 7),
-        description="Web development",
-        category="Services",
-        transaction_type="income",
-        gross_cents=125500,
-        vat_rate=Decimal("0.255"),
-    )
-
-    transaction_id = database.add_transaction(transaction)
-
-    records = database.get_transactions()
-
-    assert len(records) == 1
-    assert records[0]["id"] == transaction_id
-    assert records[0]["description"] == "Web development"
-    assert records[0]["gross_cents"] == 125500
+    got = db.get(tx_id)
+    assert got.description == "Client A"
+    assert got.amount_net == 1000.0
+    assert got.vat_amount == 240.0
+    assert got.amount_gross == 1240.0
 
 
-def test_get_transaction_by_id(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        database,
-        "DATABASE_PATH",
-        tmp_path / "test.db",
-    )
-
-    database.initialize_database()
-
-    transaction = Transaction(
-        transaction_date=date(2026, 11, 7),
-        description="Software subscription",
-        category="Software",
-        transaction_type="expense",
-        gross_cents=12550,
-        vat_rate=Decimal("0.255"),
-        vat_deductible=True,
-    )
-
-    transaction_id = database.add_transaction(transaction)
-
-    record = database.get_transaction_by_id(transaction_id)
-
-    assert record is not None
-    assert record["category"] == "Software"
-    assert record["vat_deductible"] == 1
+def test_delete(tmp_path):
+    db = Database(tmp_path / "t.db")
+    tx_id = db.add(make_tx())
+    db.delete(tx_id)
+    assert db.get(tx_id) is None
 
 
-def test_delete_transaction(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        database,
-        "DATABASE_PATH",
-        tmp_path / "test.db",
-    )
-
-    database.initialize_database()
-
-    transaction = Transaction(
-        transaction_date=date(2026, 11, 7),
-        description="Client payment",
-        category="Services",
-        transaction_type="income",
-        gross_cents=100000,
-        vat_rate=Decimal("0.255"),
-    )
-
-    transaction_id = database.add_transaction(transaction)
-
-    assert database.delete_transaction(transaction_id) is True
-    assert database.delete_transaction(transaction_id) is False
-    assert database.get_transactions() == []
-
-
-def test_transaction_count(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        database,
-        "DATABASE_PATH",
-        tmp_path / "test.db",
-    )
-
-    database.initialize_database()
-
-    assert database.get_transaction_count() == 0
-
-    transaction = Transaction(
-        transaction_date=date(2026, 11, 7),
-        description="Client payment",
-        category="Services",
-        transaction_type="income",
-        gross_cents=100000,
-        vat_rate=Decimal("0.255"),
-    )
-
-    database.add_transaction(transaction)
-
-    assert database.get_transaction_count() == 1
+def test_filter_by_date(tmp_path):
+    db = Database(tmp_path / "t.db")
+    db.add(make_tx())
+    in_range = db.filter_by_date(date(2025, 1, 1), date(2025, 12, 31))
+    out_range = db.filter_by_date(date(2024, 1, 1), date(2024, 12, 31))
+    assert len(in_range) == 1
+    assert len(out_range) == 0
